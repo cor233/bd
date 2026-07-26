@@ -1,0 +1,23 @@
+name: Sync All Branches (Keep Custom Ones)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone source and push
+        run: |
+          git clone --mirror https://github.com/Silent1566/webhtv.git temp-repo
+          cd temp-repo
+          git remote set-url --push origin https://${{ secrets.SYNC_TOKEN }}@github.com/cor233/bd.git
+          git push --all --force
+          git push --tags --force
