@@ -2,8 +2,6 @@ name: Sync Branches and Releases
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 2 * * *'
 
 jobs:
   sync:
@@ -14,10 +12,12 @@ jobs:
       - name: 同步分支和标签
         run: |
           set -euo pipefail
-          git clone --bare https://github.com/Silent1566/webhtv.git temp-repo
+          git clone --mirror https://github.com/Silent1566/webhtv.git temp-repo
           cd temp-repo
+          git update-ref -d refs/heads/bd 2>/dev/null || true
           git remote set-url --push origin "https://${SYNC_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin --all --tags --force
+          git push origin 'refs/heads/*:refs/heads/*' --force
+          git push origin 'refs/tags/*:refs/tags/*' --force
           cd ..
           rm -rf temp-repo
         env:
@@ -25,12 +25,14 @@ jobs:
 
       - name: 同步 Releases
         env:
-          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+
           SOURCE_REPO="Silent1566/webhtv"
           TARGET_REPO="${{ github.repository }}"
+          PER_PAGE=30
           PAGE=1
-          PER_PAGE=100
           RELEASES_JSON=""
 
           while true; do
@@ -59,13 +61,10 @@ jobs:
             sleep 0.5
           done
 
-          RELEASES_JSON=$(echo "$RELEASES_JSON" | jq 'sort_by(.published_at)')
-          echo "$RELEASES_JSON" > releases.json
-
-          jq -c '.[]' releases.json | while IFS= read -r release; do
+          echo "$RELEASES_JSON" | jq -c '.[]' | while read -r release; do
             TAG_NAME=$(echo "$release" | jq -r '.tag_name')
-            TITLE=$(echo "$release" | jq -r '.name // .tag_name')
-            BODY=$(echo "$release" | jq -r '.body // ""')
+            TITLE=$(echo "$release" | jq -r '.name')
+            BODY=$(echo "$release" | jq -r '.body')
             IS_PRERELEASE=$(echo "$release" | jq -r '.prerelease')
             IS_DRAFT=$(echo "$release" | jq -r '.draft')
 
@@ -118,5 +117,4 @@ jobs:
               cd ..
               rm -rf "$TEMP_DIR"
             fi
-            rm -f body.txt
           done
