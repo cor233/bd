@@ -1,4 +1,4 @@
-name: Sync All
+name: Sync Branches and Releases
 
 on:
   workflow_dispatch:
@@ -11,17 +11,20 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Sync Branches and Tags
+      - name: 同步分支和标签
         run: |
-          git clone --bare https://github.com/Silent1566/webhtv.git temp-repo
+          set -euo pipefail
+          git clone --mirror https://github.com/Silent1566/webhtv.git temp-repo
           cd temp-repo
-          git remote set-url --push origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git remote set-url --push origin "https://${SYNC_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin 'refs/heads/*:refs/heads/*' --force
           git push origin 'refs/tags/*:refs/tags/*' --force
+          cd ..
+          rm -rf temp-repo
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
 
-      - name: Sync Releases
+      - name: 同步 Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -33,9 +36,26 @@ jobs:
 
           while true; do
             API_URL="https://api.github.com/repos/${SOURCE_REPO}/releases?per_page=${PER_PAGE}&page=${PAGE}"
-            RESPONSE=$(curl -s -H "Accept: application/vnd.github.v3+json" -H "Authorization: token $GH_TOKEN" "$API_URL")
-            [ "$(echo "$RESPONSE" | jq length)" -eq 0 ] && break
-            RELEASES_JSON=$(echo "$RELEASES_JSON" "$RESPONSE" | jq -s 'add')
+            RESPONSE=$(curl -s -H "Accept: application/vnd.github.v3+json" \
+              -H "Authorization: token $GH_TOKEN" \
+              "$API_URL")
+
+            if ! echo "$RESPONSE" | jq -e 'type == "array"' > /dev/null 2>&1; then
+              echo "API response is not an array"
+              echo "$RESPONSE"
+              exit 1
+            fi
+
+            if [ "$(echo "$RESPONSE" | jq length)" -eq 0 ]; then
+              break
+            fi
+
+            if [ -z "$RELEASES_JSON" ]; then
+              RELEASES_JSON="$RESPONSE"
+            else
+              RELEASES_JSON=$(echo "$RELEASES_JSON" "$RESPONSE" | jq -s 'add')
+            fi
+
             PAGE=$((PAGE + 1))
             sleep 0.5
           done
@@ -50,28 +70,51 @@ jobs:
             IS_PRERELEASE=$(echo "$release" | jq -r '.prerelease')
             IS_DRAFT=$(echo "$release" | jq -r '.draft')
 
-            echo "=============================="
-            echo "Processing Release: $TAG_NAME"
+            echo "Processing release: $TAG_NAME"
 
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token $GH_TOKEN" "https://api.github.com/repos/$TARGET_REPO/releases/tags/$TAG_NAME")
-            [ "$HTTP_STATUS" -eq 200 ] && { echo "Already exists, skipping."; continue; }
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/$TARGET_REPO/releases/tags/$TAG_NAME")
+
+            if [ "$HTTP_STATUS" -eq 200 ]; then
+              echo "Release exists, skipping"
+              continue
+            elif [ "$HTTP_STATUS" -ne 404 ]; then
+              echo "Unexpected status code: $HTTP_STATUS"
+            fi
 
             CREATE_CMD="gh release create \"$TAG_NAME\" --repo \"$TARGET_REPO\" --title \"$TITLE\""
-            [ -n "$BODY" ] && { echo "$BODY" > body.txt; CREATE_CMD="$CREATE_CMD --notes-file body.txt"; }
-            [ "$IS_PRERELEASE" = "true" ] && CREATE_CMD="$CREATE_CMD --prerelease"
-            [ "$IS_DRAFT" = "true" ] && CREATE_CMD="$CREATE_CMD --draft"
+            if [ -n "$BODY" ]; then
+              echo "$BODY" > body.txt
+              CREATE_CMD="$CREATE_CMD --notes-file body.txt"
+            fi
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              CREATE_CMD="$CREATE_CMD --prerelease"
+            fi
+            if [ "$IS_DRAFT" = "true" ]; then
+              CREATE_CMD="$CREATE_CMD --draft"
+            fi
 
-            eval "$CREATE_CMD" || { echo "Failed to create: $TAG_NAME"; exit 1; }
+            if ! eval "$CREATE_CMD"; then
+              echo "Failed to create release $TAG_NAME"
+              exit 1
+            fi
 
-            ASSET_URLS=$(echo "$release" | jq -r '.assets[]?.browser_download_url // empty')
+            ASSET_URLS=$(echo "$release" | jq -r '.assets[]?.browser_download_url')
             if [ -n "$ASSET_URLS" ]; then
               TEMP_DIR=$(mktemp -d)
               cd "$TEMP_DIR"
               echo "$ASSET_URLS" | while IFS= read -r url; do
-                [ -n "$url" ] && curl -f -s -L -O "$url" && echo "Downloaded: $(basename "$url")" || echo "Failed: $url"
+                if [ -n "$url" ]; then
+                  echo "Downloading: $url"
+                  curl -f -s -L -O "$url" || echo "Download failed: $url"
+                fi
               done
               for file in *; do
-                [ -f "$file" ] && gh release upload "$TAG_NAME" "$file" --repo "$TARGET_REPO" --clobber
+                if [ -f "$file" ]; then
+                  echo "Uploading: $file"
+                  gh release upload "$TAG_NAME" "$file" --repo "$TARGET_REPO" --clobber
+                fi
               done
               cd ..
               rm -rf "$TEMP_DIR"
