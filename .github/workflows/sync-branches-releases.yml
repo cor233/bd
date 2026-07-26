@@ -14,7 +14,6 @@ jobs:
           set -euo pipefail
           git clone --bare https://github.com/Silent1566/webhtv.git temp-repo
           cd temp-repo
-          git config remote.origin.mirror true
           git update-ref -d refs/heads/bd 2>/dev/null || true
           git remote set-url --push origin "https://${SYNC_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin 'refs/heads/*:refs/heads/*' --force
