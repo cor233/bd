@@ -1,4 +1,4 @@
-name: Sync All Branches (Keep Custom Ones)
+name: Sync All Branches
 
 on:
   workflow_dispatch:
