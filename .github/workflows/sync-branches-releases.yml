@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Sync Branches and Tags
         run: |
-          git clone --mirror https://github.com/Silent1566/webhtv.git temp-repo
+          git clone --bare https://github.com/Silent1566/webhtv.git temp-repo
           cd temp-repo
           git remote set-url --push origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin 'refs/heads/*:refs/heads/*' --force
@@ -25,7 +25,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          SOURCE_REPO="2dust/v2rayN"
+          SOURCE_REPO="Silent1566/webhtv"
           TARGET_REPO="${{ github.repository }}"
           PAGE=1
           PER_PAGE=100
