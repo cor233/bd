@@ -14,11 +14,10 @@ jobs:
       - name: 同步分支和标签
         run: |
           set -euo pipefail
-          git clone --mirror https://github.com/Silent1566/webhtv.git temp-repo
+          git clone --bare https://github.com/Silent1566/webhtv.git temp-repo
           cd temp-repo
           git remote set-url --push origin "https://${SYNC_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin 'refs/heads/*:refs/heads/*' --force
-          git push origin 'refs/tags/*:refs/tags/*' --force
+          git push origin --all --tags --force
           cd ..
           rm -rf temp-repo
         env:
@@ -26,7 +25,7 @@ jobs:
 
       - name: 同步 Releases
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
           SOURCE_REPO="Silent1566/webhtv"
           TARGET_REPO="${{ github.repository }}"
