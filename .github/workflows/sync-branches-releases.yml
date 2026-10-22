@@ -23,7 +23,7 @@ jobs:
           cd ..
           rm -rf temp-repo
 
-      - name: 同步 Releases
+      - name: 同步发行版
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -42,7 +42,7 @@ jobs:
               "$API_URL")
 
             if ! echo "$RESPONSE" | jq -e 'type == "array"' > /dev/null 2>&1; then
-              echo "API response is not an array"
+              echo "API 响应不是数组"
               echo "$RESPONSE"
               exit 1
             fi
@@ -68,17 +68,17 @@ jobs:
             IS_PRERELEASE=$(echo "$release" | jq -r '.prerelease')
             IS_DRAFT=$(echo "$release" | jq -r '.draft')
 
-            echo "Processing release: $TAG_NAME"
+            echo "正在处理发行版：$TAG_NAME"
 
             HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: token $GH_TOKEN" \
               "https://api.github.com/repos/$TARGET_REPO/releases/tags/$TAG_NAME")
 
             if [ "$HTTP_STATUS" -eq 200 ]; then
-              echo "Release exists, skipping"
+              echo "发行版已存在，跳过"
               continue
             elif [ "$HTTP_STATUS" -ne 404 ]; then
-              echo "Unexpected status code: $HTTP_STATUS"
+              echo "意外的状态码：$HTTP_STATUS"
             fi
 
             CREATE_CMD="gh release create \"$TAG_NAME\" --repo \"$TARGET_REPO\" --title \"$TITLE\""
@@ -94,7 +94,7 @@ jobs:
             fi
 
             if ! eval "$CREATE_CMD"; then
-              echo "Failed to create release $TAG_NAME"
+              echo "创建发行版 $TAG_NAME 失败"
               exit 1
             fi
 
@@ -104,13 +104,13 @@ jobs:
               cd "$TEMP_DIR"
               echo "$ASSET_URLS" | while IFS= read -r url; do
                 if [ -n "$url" ]; then
-                  echo "Downloading: $url"
-                  curl -f -s -L -O "$url" || echo "Download failed: $url"
+                  echo "正在下载：$url"
+                  curl -f -s -L -O "$url" || echo "下载失败：$url"
                 fi
               done
               for file in *; do
                 if [ -f "$file" ]; then
-                  echo "Uploading: $file"
+                  echo "正在上传：$file"
                   gh release upload "$TAG_NAME" "$file" --repo "$TARGET_REPO" --clobber
                 fi
               done
