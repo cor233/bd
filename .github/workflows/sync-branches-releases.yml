@@ -17,13 +17,11 @@ jobs:
           git clone --bare https://github.com/Silent1566/webhtv.git temp-repo
           cd temp-repo
           git update-ref -d refs/heads/bd 2>/dev/null || true
-          git remote set-url --push origin "https://${SYNC_TOKEN}@github.com/${{ github.repository }}.git"
+          git remote set-url --push origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git push origin 'refs/heads/*:refs/heads/*' --force
           git push origin 'refs/tags/*:refs/tags/*' --force
           cd ..
           rm -rf temp-repo
-        env:
-          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
 
       - name: 同步 Releases
         env:
